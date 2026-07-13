@@ -1,25 +1,36 @@
 from fastapi import WebSocket, WebSocketDisconnect
+from connection_manager import ConnectionManager
+from game_manager import GameManager
 
-# Store all connected clients
-connected_clients = []
-
+# Create one manager object
+manager = ConnectionManager()
+game_manager = GameManager()
 
 async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
 
-    connected_clients.append(websocket)
+    await manager.connect(websocket)
 
-    print("Client Connected")
+    room_id = game_manager.find_available_room()
+    game_manager.join_room(room_id, websocket)
+
+    print(f"Player joined {room_id}")
 
     try:
         while True:
+            # Receive a message from the client
             message = await websocket.receive_text()
 
-            print("Received:", message)
+            print(f"Received: {message}")
 
             # Send the message back to the same client
-            await websocket.send_text(f"Server received: {message}")
+            await game_manager.broadcast_to_room(
+                room_id,
+                message
+            )
 
     except WebSocketDisconnect:
-        connected_clients.remove(websocket)
-        print("Client Disconnected")
+        # Remove the client when it disconnects
+        manager.disconnect(websocket)
+        game_manager.leave_room(room_id, websocket)
+
+        print(f"Player left {room_id}")
